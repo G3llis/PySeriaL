@@ -1,0 +1,132 @@
+# http://grantcurell.com/2015/01/31/use-python-to-interact-with-cisco-device-uadming-pyserial/
+
+# WORKS BEST PRIOR TO ANY AUTHENTICATION
+# THIS INITIALIZATION SCRIPT WILL ENABLE DHCP AND SSH
+# USE KEY BELOW TO REPLACE VARIABLES
+
+#================================================================================
+#================================================================================
+# Network 	: 99.0.0.0 
+# IP 		: 99.0.0.1
+# Mask 	: 255.255.255.252
+# user  	: admin
+# password 	: password
+# domain 	: traversa.com
+#================================================================================
+#================================================================================
+
+import serial
+import sys
+from time import sleep
+import time
+
+
+# OPEN SERIAL PORT
+serial_Port = serial.Serial(
+	port='com3', 
+	baudrate=9600, 
+	timeout=0, 
+	parity='N', 
+	bytesize=8, 
+	stopbits=1,
+	rtscts=True, 
+	writeTimeout=1, # ADD TIME DELAY FOR WRITE
+	xonxoff=False	
+)
+
+# START TIMER
+t0 = time.time()
+
+# FLUSH SERIAL PORT
+serial_Port.flushInput()
+
+# COMMANDS INITIAL
+serial_Port.write("\r\r".encode())
+
+# ENABLE MODE
+serial_Port.write("enable\r".encode())
+serial_Port.write("terminal length 0\r".encode())
+
+# VLAN L2
+serial_Port.write("config t\r".encode())
+serial_Port.write("vlan 999\r".encode())
+serial_Port.write("name Lab_Management\r".encode())
+
+# VLAN L3
+serial_Port.write("int vlan 999\r".encode())
+serial_Port.write("ip address 99.0.0.1 255.255.255.252\r".encode())
+serial_Port.write("description Lab_Management\r".encode())
+serial_Port.write("no shut\r".encode())
+
+# DHCP SERVER
+serial_Port.write("ip dhcp pool DHCP_SERVER\r".encode())
+serial_Port.write("network 99.0.0.0 255.255.255.252\r".encode())
+serial_Port.write("default-router 99.0.0.1\r".encode())
+serial_Port.write("ip dhcp excluded-address 99.0.0.1\r".encode())
+
+# INTERFACE ACCESS
+serial_Port.write("interface fastEthernet 1/0/1\r".encode())
+serial_Port.write("switchport access vlan 999\r".encode())
+serial_Port.write("shut\r".encode())
+sleep(1)
+serial_Port.write("no shut\r".encode())
+sleep(1)   
+serial_Port.write("exit\r".encode())
+
+# SSH
+serial_Port.write("config t\r".encode())
+serial_Port.write("enable secret password\r".encode())
+serial_Port.write("ip domain-name traversa.com\r".encode())
+
+# CRYPTO KEY REQUIRES A SLEEP TIME OF AT LEAST "5" SECONDS
+serial_Port.write("crypto key generate rsa general-keys modulus 1024\r".encode())
+sleep(5)
+serial_Port.write("\r\r".encode())
+serial_Port.write("ip ssh time-out 60\r".encode())
+serial_Port.write("ip ssh authentication-retries 2\r".encode())
+serial_Port.write("ip ssh version 2\r".encode())
+serial_Port.write("username admin privilege 15 secret password\r".encode())
+serial_Port.write("line vty 0 15\r".encode())
+serial_Port.write("transport input ssh\r".encode())
+serial_Port.write("login local\r".encode())
+serial_Port.write("end\r".encode())
+serial_Port.write("wr\r".encode())
+
+# SHOW RUNNING CONFIG
+serial_Port.write("show run\r".encode())
+
+#PASS SERIAL_PORT OUPUT TO THE INWAITING VARIABLE
+serial_Inwaiting = serial_Port.inWaiting()
+
+# GIVE THE LINE A SMALL AMOUNT OF TIME TO RECEIVE DATA
+sleep(1)
+
+# 9600 baud is not very fast so if you call serial_Port.inWaiting() without sleeping at all it will likely just say
+# 0 bytes. This loop sleeps 1 second each iteration and updates serial_Inwaiting. If serial_Port.inWaiting() returns a
+# higher value than what is in serial_Inwaiting we know that more Data is still coming in. I noticed just by doing a ?
+# command it had to iterate through the loop twice before all the Data arrived.
+while serial_Inwaiting < serial_Port.inWaiting():
+    serial_Inwaiting = serial_Port.inWaiting()
+    sleep(1)
+  
+# READS OUTPUT FROM SERIAL_INWAITING THEN DECODES FROM BYTES TO STRING
+Data = serial_Port.read(serial_Inwaiting).decode()
+print('=' * 80)
+print("SHOW RUNNING CONFIG "+ serial_Port.name) # PRINT SERIAL PORT NAME HERE
+print('=' * 80)
+print(Data)
+
+# STOP TIMER
+t1 = time.time()
+
+# PRINT TIMER OUTPUT
+print('')
+print('=' * 80)
+print('Total Sequence Time (seconds):', t1 - t0) 
+print('=' * 80)
+
+# CLOSE SERIAL
+serial_Port.close()
+
+
+
